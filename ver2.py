@@ -17,6 +17,45 @@ logging.basicConfig(
     ],
 )
 
+# --- Automation Functions ---
+
+async def navigate_to_search_results(page, from_city, to_city, date_str):
+    """
+    Constructs the search URL and navigates directly to the bus search results page.
+    """
+    logging.info("Building and navigating to the search results page directly.")
+
+    # The city IDs for Bangalore and Palakkad are known from previous analysis
+    from_city_value = f"298|{from_city}"
+    to_city_value = f"462|{to_city}"
+    
+    # Example URL: https://onlineksrtcswift.com/search?fromCity=298%7CBangalore&toCity=462%7CPalakkad&departDate=28-09-2025&mode=oneway&src=h&stationInFromCity=&stationInToCity=
+    search_url = (
+        f"https://onlineksrtcswift.com/search?fromCity={from_city_value}"
+        f"&toCity={to_city_value}"
+        f"&departDate={date_str}"
+        "&mode=oneway&src=h&stationInFromCity=&stationInToCity="
+    )
+
+    await page.goto(search_url, timeout=60000)
+    
+
+
+async def select_bus_and_seats(page, bus_provider_name):
+    """
+    Finds a specific bus by its provider name and clicks 'Select Seats'.
+    """
+    logging.info(f"Searching for bus provided by: '{bus_provider_name}'...")
+    
+    # This selector finds the parent div (the bus card) that contains the bus name
+    bus_card = page.locator("div.srch-card", has=page.locator(f":text('{bus_provider_name}')")).first
+    
+    # Within that card, find the 'Select Seats' button and click it
+    logging.info("Bus card found. Clicking 'Select Seats' button.")
+    await bus_card.locator(".selectbutton").click()
+
+
+# --- Main Orchestration Function ---
 
 async def main():
     """
@@ -24,75 +63,25 @@ async def main():
     """
     logging.info("Starting bus booking automation for KSRTC Swift.")
 
-    # Hardcoded values directly in the script as requested
-    TARGET_URL = "https://onlineksrtcswift.com/"
+    # Hardcoded values
     FROM_CITY = "Bangalore"
     TO_CITY = "Palakkad"
-    DATE_STR = "2025-09-28"
+    DATE_STR = "28-09-2025"
+    BUS_PROVIDER = "PALAKKAD DEPOT"
 
-    # Launch a new browser instance
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False)
         context = await browser.new_context(viewport={"width": 1280, "height": 720})
         page = await context.new_page()
 
         try:
-            # 1. Navigate to the website
-            logging.info(f"Navigating to {TARGET_URL}...")
-            await page.goto(TARGET_URL, timeout=60000)
-
-            # 2. Handle the promotional pop-up
-            logging.info("Checking for and closing promotional messages...")
-            try:
-                # Based on the HTML you provided, we can target the close button
-                # within the g-popup-close class.
-                close_button = page.locator("a.g-popup-close")
-                await close_button.click(timeout=10000)
-                logging.info("Promotional pop-up closed successfully.")
-            except PlaywrightTimeoutError:
-                logging.info("No promotional pop-up found, continuing...")
+            # Use the new, direct navigation function
+            await navigate_to_search_results(page, FROM_CITY, TO_CITY, DATE_STR)
             
-            # Wait for the main booking form to be visible before proceeding
-            await page.wait_for_selector('text=Book Bus Ticket', state='visible')
-
-            # Use a smarter way to handle the pre-filled form
-            logging.info("Swapping default 'From' and 'To' cities.")
-            # Use the unique ID of the swap button
-            await page.locator("#swap").click()
-
-            # Now, fill the "To" city with the new value. The 'From' city is already set to 'Trivandrum'.
-            logging.info(f"Changing 'To' city to: {TO_CITY}")
+            # Find and select the bus
+            await select_bus_and_seats(page, BUS_PROVIDER)
             
-            # Explicitly click the "To" city input field to make the dropdown visible
-            await page.locator("#toCity_chosen").click()
-
-            await page.locator("#toCity_chosen input").fill(TO_CITY)
-            
-            # Use a more robust locator to click the correct list item from the search results
-            await page.locator(".chosen-results li").get_by_text(TO_CITY).click()
-
-            # --- Start of Date Selection ---
-            logging.info(f"Selecting journey date: {DATE_STR}")
-            date_parts = DATE_STR.split('-')
-            # Ensure the day is an integer to avoid issues with leading zeros
-            day = int(date_parts[2])
-            
-            # Click the date input field to open the calendar
-            logging.info("Clicking the date input field to open the calendar.")
-            await page.locator("#departDate").click()
-            
-            # Wait for the calendar to be visible before attempting to select a day
-            logging.info("Waiting for the calendar to appear...")
-            await page.wait_for_selector("#ui-datepicker-div", state='visible')
-
-            # Use the most robust locator to click the correct day.
-            logging.info(f"Attempting to click day {day}...")
-            await page.locator(f'#ui-datepicker-div a.ui-state-default').get_by_text(str(day), exact=True).click()
-            
-            logging.info(f"Successfully clicked day {day}.")
-            # --- End of Date Selection ---
-
-            logging.info("SUCCESS: 'From', 'To', and date selected.")
+            logging.info("SUCCESS: All steps completed successfully.")
             
         except PlaywrightTimeoutError:
             logging.error("Timeout occurred. The page structure might have changed.")
