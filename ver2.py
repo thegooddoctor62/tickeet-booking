@@ -61,6 +61,10 @@ async def main():
 
             # Now, fill the "To" city with the new value. The 'From' city is already set to 'Trivandrum'.
             logging.info(f"Changing 'To' city to: {TO_CITY}")
+            
+            # Explicitly click the "To" city input field to make the dropdown visible
+            await page.locator("#toCity_chosen").click()
+
             await page.locator("#toCity_chosen input").fill(TO_CITY)
             
             # Use a more robust locator to click the correct list item from the search results
@@ -75,10 +79,9 @@ async def main():
             logging.error(f"An unexpected error occurred: {e}")
             await page.screenshot(path=f"logs/screenshots/step1_failure_{int(datetime.datetime.now().timestamp())}.png")
         finally:
+            await asyncio.sleep(100)
             await browser.close()
             logging.info("Automation session closed.")
-
-
 
 if __name__ == "__main__":
     asyncio.run(main())
