@@ -38,9 +38,7 @@ async def navigate_to_search_results(page, from_city, to_city, date_str):
     )
 
     await page.goto(search_url, timeout=60000)
-    
-
-
+ 
 async def select_bus_and_seats(page, bus_provider_name):
     """
     Finds a specific bus by its provider name and clicks 'Select Seats'.
@@ -53,6 +51,44 @@ async def select_bus_and_seats(page, bus_provider_name):
     # Within that card, find the 'Select Seats' button and click it
     logging.info("Bus card found. Clicking 'Select Seats' button.")
     await bus_card.locator(".selectbutton").click()
+
+async def select_seats(page, bus_card, seat_priority=[3, 5, 4, 6], max_seats=1):
+    logging.info("Searching for available seats...")
+
+    # ✅ Locate the seat chart like we did bus_card
+    seat_chart = bus_card.locator("div.seatchart", has=page.locator("div.seat-wrap >> div.seats"))
+
+    try:
+        await seat_chart.wait_for(timeout=15000)
+        logging.info("Seat chart found. Checking for available seats.")
+    except:
+        logging.error("Seat chart not found.")
+        return
+
+    selected_seats = 0
+
+    # ✅ Loop through priority seats
+    for seat_num in seat_priority:
+        if selected_seats >= max_seats:
+            break
+
+        # ✅ Use 'has' logic for each seat inside the seat chart
+        seat_locator = seat_chart.locator(
+            "div.seatlook",
+            has=page.locator(f"div.farepopup:has-text('Seat: {seat_num}')")
+        )
+
+        if await seat_locator.count() > 0:
+            logging.info(f"Selecting seat {seat_num}")
+            await seat_locator.first.click()
+            selected_seats += 1
+        else:
+            logging.info(f"Seat {seat_num} not available.")
+
+    if selected_seats == 0:
+        logging.warning("No priority seats were selected.")
+    else:
+        logging.info(f"Selected {selected_seats} seat(s).")
 
 
 # --- Main Orchestration Function ---
@@ -75,11 +111,13 @@ async def main():
         page = await context.new_page()
 
         try:
-            # Use the new, direct navigation function
             await navigate_to_search_results(page, FROM_CITY, TO_CITY, DATE_STR)
+            
+            bus_card = page.locator("div.srch-card", has=page.locator(f":text('{BUS_PROVIDER}')")).first
             
             # Find and select the bus
             await select_bus_and_seats(page, BUS_PROVIDER)
+            await select_seats(page, bus_card)
             
             logging.info("SUCCESS: All steps completed successfully.")
             
@@ -93,8 +131,6 @@ async def main():
             await asyncio.sleep(100)
             await browser.close()
             logging.info("Automation session closed.")
-
-
 
 if __name__ == "__main__":
     asyncio.run(main())
