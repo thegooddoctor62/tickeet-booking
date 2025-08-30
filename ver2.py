@@ -55,7 +55,6 @@ async def select_bus_and_seats(page, bus_provider_name):
 async def select_seats(page, bus_card, seat_priority=[3, 5, 4, 6], max_seats=1):
     logging.info("Searching for available seats...")
 
-    # ✅ Locate the seat chart like we did bus_card
     seat_chart = bus_card.locator("div.seatchart", has=page.locator("div.seat-wrap >> div.seats"))
 
     try:
@@ -66,24 +65,34 @@ async def select_seats(page, bus_card, seat_priority=[3, 5, 4, 6], max_seats=1):
         return
 
     selected_seats = 0
+    all_seats = seat_chart.locator("div.seatlook")
 
-    # ✅ Loop through priority seats
     for seat_num in seat_priority:
         if selected_seats >= max_seats:
             break
 
-        # ✅ Use 'has' logic for each seat inside the seat chart
-        seat_locator = seat_chart.locator(
-            "div.seatlook",
-            has=page.locator(f"div.farepopup:has-text('Seat: {seat_num}')")
-        )
+        found_seat = None
 
-        if await seat_locator.count() > 0:
+        for i in range(await all_seats.count()):
+            seat_div = all_seats.nth(i)
+            text = await seat_div.text_content()
+
+            # Skip sold seats
+            if "Sold" in text:
+                continue
+
+            # Match exact seat number in farepopup
+            fare_text = await seat_div.locator("div.farepopup").text_content()
+            if fare_text and f"Seat: {seat_num} |" in fare_text:
+                found_seat = seat_div
+                break
+
+        if found_seat:
             logging.info(f"Selecting seat {seat_num}")
-            await seat_locator.first.click()
+            await found_seat.click()
             selected_seats += 1
         else:
-            logging.info(f"Seat {seat_num} not available.")
+            logging.info(f"Seat {seat_num} not available. Trying next priority seat.")
 
     if selected_seats == 0:
         logging.warning("No priority seats were selected.")
